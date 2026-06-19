@@ -245,14 +245,15 @@ def update_feed_xml(title, affiliate_url, pub_date, asin, image_url, description
 			<media:content url="{escaped_img}" type="image/jpeg" medium="image" />
 		</item>"""
 		
-        # 1. Insert item right under <channel> tag
-        channel_pattern = r'(<channel>[^<]*)'
-        match = re.search(channel_pattern, feed_content)
+        # 1. Insert item right before the first <item> tag to maintain valid RSS metadata order
+        item_pattern = r'(<item>)'
+        match = re.search(item_pattern, feed_content)
         if not match:
-            print("ERROR: Could not find <channel> tag in feed.xml")
-            return False
-            
-        feed_content = re.sub(channel_pattern, f"\\1\n{new_item_xml}", feed_content, count=1)
+            # Fallback to inserting under <channel> if no items exist yet
+            channel_pattern = r'(<channel>[^<]*)'
+            feed_content = re.sub(channel_pattern, f"\\1\n{new_item_xml}", feed_content, count=1)
+        else:
+            feed_content = re.sub(item_pattern, f"{new_item_xml}\n\\1", feed_content, count=1)
         
         # 2. Update <lastBuildDate>
         now_rfc = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
