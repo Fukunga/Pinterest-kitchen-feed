@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="p:domain_verify" content="c20a2def9ea3265e3cab280005afe74d"/>
+    <title>Smart Kitchen Finds</title>
+    <script type="text/javascript">
+        // Client-side router for legacy WordPress query parameter URLs (?p=XX)
+        const urlParams = new URLSearchParams(window.location.search);
+        const postId = urlParams.get('p');
+        
+        const redirects = {
+        "25": "https://www.amazon.com/dp/B01ECEG8I4?tag=saisaido-20",
+        "26": "https://www.amazon.com/dp/B0813YQGDY?tag=saisaido-20",
+        "27": "https://www.amazon.com/dp/B00004OCIP?tag=saisaido-20",
+        "28": "https://www.amazon.com/dp/B00004OCJZ?tag=saisaido-20",
+        "29": "https://www.amazon.com/dp/B07K64FSTH?tag=saisaido-20",
+        "30": "https://www.amazon.com/dp/B07V2CHSVH?tag=saisaido-20",
+        "31": "https://www.amazon.com/dp/B01N22Q5EE?tag=saisaido-20"
+        };
+        
+        if (postId && redirects[postId]) {
+            window.location.href = redirects[postId];
+        } else {
+            // Fallback for root visits
+            window.location.href = "https://www.pinterest.com/saisaidoshare";
+        }
+    </script>
+</head>
+<body>
+    <p>Redirecting... If you are not redirected, please visit our <a href="https://www.pinterest.com/saisaidoshare">Pinterest Profile</a>.</p>
+</body>
+</html>

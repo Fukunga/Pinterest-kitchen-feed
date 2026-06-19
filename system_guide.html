@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pinterest × Amazon.com 全自動アフィリエイトシステム 仕様・環境構築書</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FF9900; /* Amazon Orange */
+            --primary-hover: #e68a00;
+            --pinterest: #BD081C; /* Pinterest Red */
+            --dark-bg: #0F172A;
+            --card-bg: #1E293B;
+            --border: #334155;
+            --text-main: #F8FAFC;
+            --text-muted: #94A3B8;
+            --success: #10B981;
+            --warning: #F59E0B;
+            --danger: #EF4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            background-color: var(--dark-bg);
+            color: var(--text-main);
+            line-height: 1.6;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        /* Header / Cover */
+        header {
+            text-align: center;
+            margin-bottom: 50px;
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 40px;
+            position: relative;
+        }
+
+        .badge-container {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .badge {
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .badge-amazon {
+            background-color: rgba(255, 153, 0, 0.15);
+            color: var(--primary);
+            border: 1px solid rgba(255, 153, 0, 0.3);
+        }
+
+        .badge-pinterest {
+            background-color: rgba(189, 8, 28, 0.15);
+            color: #ff4d62;
+            border: 1px solid rgba(189, 8, 28, 0.3);
+        }
+
+        .badge-serverless {
+            background-color: rgba(16, 185, 129, 0.15);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 15px;
+            background: linear-gradient(135deg, #FFF 30%, var(--primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .meta-subtitle {
+            color: var(--text-muted);
+            font-size: 1.05rem;
+        }
+
+        .print-btn-container {
+            margin-top: 30px;
+        }
+
+        .btn {
+            background-color: var(--primary);
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95rem;
+        }
+
+        .btn:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        /* Section styles */
+        section {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid var(--border);
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            border-left: 4px solid var(--primary);
+            padding-left: 15px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        h3 {
+            font-size: 1.15rem;
+            margin: 20px 0 10px 0;
+            color: var(--primary);
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: #E2E8F0;
+        }
+
+        ul, ol {
+            margin-bottom: 20px;
+            padding-left: 25px;
+            color: #E2E8F0;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        /* Code & Tables */
+        code {
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            color: #ff9d00;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background-color: rgba(0, 0, 0, 0.4);
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
+
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            color: #A7F3D0;
+            font-size: 0.9rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 25px;
+        }
+
+        th, td {
+            border: 1px solid var(--border);
+            padding: 12px 15px;
+            text-align: left;
+        }
+
+        th {
+            background-color: rgba(255, 153, 0, 0.1);
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        tr:nth-child(even) {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border-left: 4px solid;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .alert-info {
+            background-color: rgba(59, 130, 246, 0.1);
+            border-left-color: #3B82F6;
+            color: #93C5FD;
+        }
+
+        .alert-warning {
+            background-color: rgba(245, 158, 11, 0.1);
+            border-left-color: var(--warning);
+            color: #FDE68A;
+        }
+
+        .alert-success {
+            background-color: rgba(16, 185, 129, 0.1);
+            border-left-color: var(--success);
+            color: #A7F3D0;
+        }
+
+        .alert-danger {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-left-color: var(--danger);
+            color: #FCA5A5;
+        }
+
+        .alert-title {
+            font-weight: 700;
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            body {
+                padding: 20px 10px;
+            }
+            section {
+                padding: 20px;
+            }
+            h1 {
+                font-size: 1.6rem;
+            }
+        }
+
+        /* Print Mode styles */
+        @media print {
+            body {
+                background-color: #fff;
+                color: #000;
+                padding: 0;
+            }
+            .container {
+                max-width: 100%;
+            }
+            h1 {
+                background: none;
+                -webkit-text-fill-color: initial;
+                color: #000;
+                font-size: 2.2rem;
+            }
+            .print-btn-container, .btn {
+                display: none !important;
+            }
+            section {
+                background-color: #fff;
+                border: none;
+                padding: 0;
+                margin-bottom: 40px;
+                page-break-inside: avoid;
+            }
+            h2 {
+                border-left-color: #000;
+                color: #000;
+                border-bottom: 1px solid #ccc;
+                padding-bottom: 5px;
+            }
+            h3 {
+                color: #333;
+            }
+            code {
+                background-color: #f4f4f4;
+                color: #000;
+                border: 1px solid #ddd;
+            }
+            pre {
+                background-color: #f9f9f9;
+                border: 1px solid #ccc;
+            }
+            pre code {
+                color: #000;
+            }
+            th {
+                background-color: #f2f2f2;
+                color: #000;
+            }
+            td {
+                color: #000;
+            }
+            .alert {
+                background-color: #fafafa;
+                border: 1px solid #ccc;
+                color: #000;
+                page-break-inside: avoid;
+            }
+            .alert-info { border-left-color: #0073e6; }
+            .alert-warning { border-left-color: #e6b800; }
+            .alert-success { border-left-color: #00b300; }
+            .alert-danger { border-left-color: #e60000; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Header Cover -->
+    <header>
+        <div class="badge-container">
+            <span class="badge badge-amazon">Amazon US Partner</span>
+            <span class="badge badge-pinterest">Pinterest Business</span>
+            <span class="badge badge-serverless">Serverless Static</span>
+        </div>
+        <h1>Pinterest × Amazon.com<br>全自動アフィリエイトシステム 仕様・環境構築書</h1>
+        <p class="meta-subtitle">WordPress完全廃止 ➔ サーバー維持費「0円」の静的直リンク配信モデル</p>
+        <div class="print-btn-container">
+            <button class="btn" onclick="window.print()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                PDF / 印刷用に出力する
+            </button>
+        </div>
+    </header>
+
+    <!-- Section 1: Overview -->
+    <section>
+        <h2>1. システム概要とマネタイズの仕組み</h2>
+        <p>本システムは、かつてXServer等の有料サーバー上に構築されていたWordPressブログを<strong>完全に廃止</strong>し、維持費「0円」のGitHub Pagesに移行して構築された、Pinterestアフィリエイト全自動化システムです。</p>
+        
+        <h3>💡 マネタイズの核となる「直リンク（Direct Link）」方式</h3>
+        <ul>
+            <li><strong>従来の方式</strong>: Pinterest ➔ 自社WordPressブログ（記事内にアフィリンク） ➔ Amazon.com</li>
+            <li><strong>本システムの方式</strong>: Pinterest ➔ <strong>Amazon.com（アフィリエイト直リンク）</strong></li>
+        </ul>
+        <p>クッションページ（ブログ）を挟まないため、遷移時のユーザー離脱を完全に防止し、アソシエイト成約率を最大化します。WordPressサーバーの管理や、月々のサーバー維持費を完全ゼロ（0円）に削減しました。</p>
+
+        <h3>⚠️ 規約違反を回避するための重要対策（広告開示）</h3>
+        <p>AmazonアソシエイトおよびPinterestのポリシー上、アフィリエイト直リンクをソーシャルメディアへ投稿する場合は<strong>「広告であることを一目で視認可能に開示すること」</strong>が義務付けられています。</p>
+        <div class="alert alert-success">
+            <span class="alert-title">自動コンプライアンス処理</span>
+            本システムの自動生成スクリプトは、Pinterestに読み込ませるRSSフィードの説明文（Description）の末尾に、自動的に <code>#ad #affiliate</code> ハッシュタグを挿入します。これによりアカウントBANのリスクを恒久的に回避します。
+        </div>
+    </section>
+
+    <!-- Section 2: Requirements -->
+    <section>
+        <h2>2. 必要素材と取得済みアカウント情報</h2>
+        <p>システムを稼働・変更するために紐付いているアカウントと認証情報の一覧です。未来の設定変更や復旧時はこれらを参照してください。</p>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>サービス名</th>
+                    <th>設定・用途</th>
+                    <th>本システムでのアカウント/パラメータ</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Amazon Associates (US)</strong></td>
+                    <td>アソシエイトID (アフィリエイト報酬の獲得)</td>
+                    <td><code>saisaido-20</code> (USタグ)</td>
+                </tr>
+                <tr>
+                    <td><strong>Gemini API (Google AI)</strong></td>
+                    <td>トレンド商品の選定・紹介文（英語）の執筆</td>
+                    <td><code>GEMINI_API_KEY</code></td>
+                </tr>
+                <tr>
+                    <td><strong>GitHub</strong></td>
+                    <td>静的ファイル (RSS / 画像) の無料ホスティング</td>
+                    <td>ユーザー名: <code>fukunga</code> / リポジトリ名: <code>Pinterest-kitchen-feed</code></td>
+                </tr>
+                <tr>
+                    <td><strong>GitHub トークン (PAT)</strong></td>
+                    <td>ローカルからGitHubへ自動プッシュするための認証鍵</td>
+                    <td><code>ghp_YOUR_PERSONAL_ACCESS_TOKEN_HERE</code> (※要秘匿管理)</td>
+                </tr>
+                <tr>
+                    <td><strong>独自ドメイン</strong></td>
+                    <td>過去ピンのURL構造を引き継ぐためのドメイン</td>
+                    <td><code>kitchen.saisaido.com</code> (エックスサーバーDNSで管理)</td>
+                </tr>
+                <tr>
+                    <td><strong>Pinterest Business</strong></td>
+                    <td>RSSフィードを自動巡回・自動ピン作成する元</td>
+                    <td>フィードURL: <code>https://kitchen.saisaido.com/feed.xml</code></td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+
+    <!-- Section 3: Technical Spec & File Structure -->
+    <section>
+        <h2>3. 技術仕様とシステム構造</h2>
+        <p>プログラムはWindows上で動作し、生成した静的ファイルをGitHubリポジトリへ自動アップロード（デプロイ）することで機能します。</p>
+
+        <h3>📂 プロジェクトのフォルダ構造マップ</h3>
+        <pre><code>c:\Datas\Gemini\Pinterest_Amazon\
+├── .env                # APIキーやGitHub認証情報などの環境変数 (非公開・Git追跡除外)
+├── .gitignore          # .envやキャッシュファイルをGit管理から除外する設定
+├── feed.xml            # Pinterestが巡回して読み込むメインのRSSフィードファイル
+├── index.html          # 旧パラメータ「?p=XX」をAmazonへ自動ルーティングするルートHTML
+├── register_task.bat   # Windowsのタスクスケジューラにボットを登録する自動化スクリプト
+├── requirements.txt    # 動作に必要なPythonパッケージリスト
+├── 2026/               # 過去30件のWordPress記事のパーマリンクを再現したフォルダ群
+│   └── 06/
+│       └── 03/
+│           └── [記事スラグ]/
+│               └── index.html  # 昔のピンからアクセスした読者をAmazonへ瞬時転送するHTML
+├── data/
+│   ├── products.csv    # トレンド商品の候補リスト
+│   └── posting_history.csv # 過去に投稿されたASINの重複チェック用履歴データ
+├── images/             # Pinterestでピンとして表示される商品の画像保存先フォルダ
+└── src/
+    ├── main.py         # システムのメイン実行スクリプト
+    ├── git_publisher.py# 更新されたファイルを自動的にGitHubにプッシュするモジュール
+    ├── content_generator.py # Gemini APIを使って英語のレビュー記事・タイトルを生成する処理
+    └── trend_finder.py # Amazonの売れ筋トレンドを自動検索するモジュール</code></pre>
+
+        <h3>🔗 過去のリンク（資産）を100%救済する仕組み</h3>
+        <p>WordPressから移行した際、過去にPinterestに投稿された「古いピン」を踏んだユーザーがアクセスエラー（404エラー）にならないよう、以下の救済ルーティングを組んでいます。</p>
+        <ol>
+            <li><strong>日付ベースのパーマリンク（例: <code>/2026/06/03/記事タイトル/</code>）:</strong><br>
+                対応するすべてのローカルフォルダ内に、<code>meta refresh</code>およびJavaScriptを使用した「アフィリエイト自動転送HTML」を配置しています。
+            </li>
+            <li><strong>パラメータベースの旧URL（例: <code>/?p=25</code>）:</strong><br>
+                ルート直下の <code>index.html</code> にマッピング用のJavaScriptを組み込み、古い投稿ID（p値）から該当するAmazon商品ページへ瞬時にリダイレクトさせます。
+            </li>
+        </ol>
+    </section>
+
+    <!-- Section 4: Installation & Running -->
+    <section>
+        <h2>4. 環境構築手順 (再セットアップ方法)</h2>
+        <p>別のPCへ移行する場合や、環境を初期化して再起動する場合の手順です。</p>
+
+        <h3>ステップ1: Python環境の準備</h3>
+        <p>WindowsにPython 3.12以上がインストールされていることを確認し、プロジェクトフォルダ内でターミナル（PowerShell）を開いて以下を実行します。</p>
+        <pre><code>pip install -r requirements.txt</code></pre>
+
+        <h3>ステップ2: 接続情報ファイル（.env）の作成</h3>
+        <p>プロジェクトのルートディレクトリに <code>.env</code> というテキストファイルを作成し、以下の内容を記述します。</p>
+        <pre><code>GEMINI_API_KEY=【Gemini API Key】
+AMAZON_ASSOCIATE_TAG=saisaido-20
+
+# GitHub自動パブリッシュ設定
+GITHUB_USERNAME=fukunga
+GITHUB_REPO=Pinterest-kitchen-feed
+GITHUB_PAT=ghp_YOUR_PERSONAL_ACCESS_TOKEN_HERE</code></pre>
+        <div class="alert alert-danger">
+            <span class="alert-title">⚠️ セキュリティ上の重要注意</span>
+            <code>.env</code> ファイルにはAPIキーと書き込み用権限を持つGitHubのトークンが含まれているため、<strong>絶対にリポジトリ（GitHub上）にアップロードしないでください。</strong> 必ず <code>.gitignore</code> に <code>.env</code> が指定されていることを確認してください。
+        </div>
+
+        <h3>ステップ3: タスクスケジューラへの登録</h3>
+        <p>毎日決まった時間に自動でボットを動作させるため、Windowsのタスクスケジューラにタスクを設定します。<br>
+        フォルダ内にある <code>register_task.bat</code> を<strong>ダブルクリックして実行するだけ</strong>で、自動的に毎日朝7:00にボットが起動するよう設定されます。</p>
+    </section>
+
+    <!-- Section 5: Operation & PDCA -->
+    <section>
+        <h2>5. 日常運用と改善（PDCA）のポイント</h2>
+        <p>自動運転中のパフォーマンス向上およびチェック方法です。</p>
+
+        <h3>🔄 PDCAサイクルの回し方</h3>
+        <ul>
+            <li><strong>Plan（商品候補の追加）:</strong><br>
+                自動でトレンド商品を検知しますが、売りたい特定の商品がある場合は、<code>data/products.csv</code> の末尾に行を追加して、ASINと商品名、キーワードを追記しておくと、ボットが順次ピックアップして自動投稿します。
+            </li>
+            <li><strong>Do（自動稼働の監視）:</strong><br>
+                時折、プロジェクトルートにある <code>run_log.txt</code> を開いてエラーが出ていないか、GitHub Pagesに最新のファイルがアップロードされているかを確認します。
+            </li>
+            <li><strong>Check（データの分析）:</strong><br>
+                「AmazonアソシエイトUS」の管理画面で、クリックされた商品や売れ筋のジャンルを特定します。
+            </li>
+            <li><strong>Action（横展開）:</strong><br>
+                クリックや売上の多い類似製品のASINを <code>products.csv</code> に優先的に追加して、アフィリエイト効率を高めます。
+            </li>
+        </ul>
+    </section>
+
+    <!-- Section 6: Cleanup / Removal -->
+    <section>
+        <h2>6. システムの撤退・削除手順</h2>
+        <p>将来的にこのアフィリエイト事業を完全に停止（撤退）する場合、または元のWordPressブログに戻す場合のクリーンアップ手順です。</p>
+        
+        <ol>
+            <li>
+                <strong>Windowsの自動タスクの停止:</strong><br>
+                管理者権限でコマンドプロンプト/PowerShellを開き、以下のコマンドを実行してWindowsから自動起動タスクを削除します。
+                <pre><code>schtasks /delete /tn "Pinterest_Amazon_Automation" /f</code></pre>
+            </li>
+            <li>
+                <strong>GitHub Pagesの削除:</strong><br>
+                GitHubリポジトリ（<code>Pinterest-kitchen-feed</code>）の **Settings ➔ General** の最下部にある「Danger Zone」から **「Delete this repository」** をクリックしてリポジトリごと削除します。これでWeb上のRSSや転送HTMLはすべて消去されます。
+            </li>
+            <li>
+                <strong>DNSレコードの削除:</strong><br>
+                エックスサーバー等のDNS管理画面から、追加したホスト名 <code>kitchen</code>（CNAME ➔ <code>fukunga.github.io</code>）のレコードを削除します。
+            </li>
+            <li>
+                <strong>ローカルファイルの削除:</strong><br>
+                PC上にあるプロジェクトフォルダ <code>c:\Datas\Gemini\Pinterest_Amazon</code> をそのままゴミ箱に入れて削除します。
+            </li>
+        </ol>
+    </section>
+</div>
+
+</body>
+</html>
