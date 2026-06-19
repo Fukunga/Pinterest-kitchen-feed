@@ -212,6 +212,8 @@ def clean_html_to_plain_text(html_content):
     text = html_content_parser = re.sub(r'&[a-zA-Z0-9#]+;', ' ', text)
     # Collapse multiple spaces/newlines
     text = re.sub(r'\s+', ' ', text).strip()
+    # Replace curly quotes and apostrophes to standard ASCII to prevent XML/parser bugs
+    text = text.replace('’', "'").replace('‘', "'").replace('“', '"').replace('”', '"')
     return text
 
 def update_feed_xml(title, affiliate_url, pub_date, asin, image_url, description_text):
