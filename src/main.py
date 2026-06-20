@@ -4,6 +4,7 @@ import re
 import requests
 import pandas as pd
 import urllib3
+import json
 from datetime import datetime
 from xml.sax.saxutils import escape
 from dotenv import load_dotenv
@@ -172,6 +173,186 @@ def fetch_amazon_image_url(asin, product_name):
     
     print(f"WARNING: Amazon image retrieval failed. Using premium Flickr fallback image for queries '{keyword_str}': {fallback_url}")
     return fallback_url
+
+DIAGNOSTICS_JSON = os.path.join(BASE_DIR, "data", "diagnostics.json")
+DIAGNOSTICS_LOG = os.path.join(BASE_DIR, "data", "diagnostics.log")
+
+def get_diagnostics():
+    if os.path.exists(DIAGNOSTICS_JSON):
+        try:
+            with open(DIAGNOSTICS_JSON, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_diagnostics(data):
+    os.makedirs(os.path.dirname(DIAGNOSTICS_JSON), exist_ok=True)
+    try:
+        with open(DIAGNOSTICS_JSON, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"Failed to save diagnostics JSON: {e}")
+
+def update_diagnostics_step(asin, product_name, step, status, error_msg=None):
+    data = get_diagnostics()
+    if asin not in data:
+        data[asin] = {
+            "product_name": product_name,
+            "posted_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "redirect_url": f"https://kitchen.saisaido.com/dp/{asin}/",
+            "steps": {
+                "generation": "pending",
+                "xml_update": "pending",
+                "git_push": "pending",
+                "github_hosting": "pending",
+                "pinterest_sync": "pending"
+            },
+            "errors": []
+        }
+    
+    data[asin]["steps"][step] = status
+    if error_msg:
+        existing_msgs = [err["message"] for err in data[asin]["errors"]]
+        if error_msg not in existing_msgs:
+            data[asin]["errors"].append({
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "step": step,
+                "message": error_msg
+            })
+    save_diagnostics(data)
+
+def run_diagnostics_pipeline():
+    """Runs verification on all pending posts and generates the diagnostics log file."""
+    print("Running diagnostics pipeline on previous posts...")
+    data = get_diagnostics()
+    username = os.getenv("PINTEREST_USERNAME")
+    
+    # 1. Fetch Pinterest profile HTML if username is configured
+    pinterest_html = ""
+    if username:
+        try:
+            url = f"https://www.pinterest.com/{username}/"
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+            r = requests.get(url, headers=headers, timeout=10)
+            if r.status_code == 200:
+                pinterest_html = r.text
+            else:
+                print(f"Pinterest profile fetch returned status {r.status_code}")
+        except Exception as e:
+            print(f"Failed to fetch Pinterest profile: {e}")
+            
+    # 2. Check pending verifications
+    for asin, info in data.items():
+        steps = info["steps"]
+        posted_at_str = info.get("posted_at")
+        posted_at = datetime.strptime(posted_at_str, "%Y-%m-%d %H:%M:%S") if posted_at_str else datetime.now()
+        hours_since_post = (datetime.now() - posted_at).total_seconds() / 3600.0
+        
+        # Check GitHub Hosting
+        if steps.get("github_hosting") == "pending":
+            redirect_url = info.get("redirect_url", f"https://kitchen.saisaido.com/dp/{asin}/")
+            try:
+                r = requests.get(redirect_url, timeout=5)
+                if r.status_code == 200 and (f"/dp/{asin}" in r.text or "amazon.com" in r.text.lower()):
+                    steps["github_hosting"] = "success"
+                elif hours_since_post > 24:
+                    steps["github_hosting"] = "failed"
+                    info["errors"].append({
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "step": "github_hosting",
+                        "message": f"GitHub hosting verification timed out after 24h (HTTP {r.status_code})"
+                    })
+            except Exception as e:
+                if hours_since_post > 24:
+                    steps["github_hosting"] = "failed"
+                    info["errors"].append({
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "step": "github_hosting",
+                        "message": f"GitHub hosting verification error: {e}"
+                    })
+                    
+        # Check Pinterest Sync
+        if steps.get("pinterest_sync") == "pending":
+            if not username:
+                pass
+            elif pinterest_html:
+                target_phrase = f"kitchen.saisaido.com/dp/{asin}"
+                if target_phrase in pinterest_html or asin in pinterest_html:
+                    steps["pinterest_sync"] = "success"
+                elif hours_since_post > 48:
+                    steps["pinterest_sync"] = "failed"
+                    info["errors"].append({
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "step": "pinterest_sync",
+                        "message": "Pinterest sync timed out. Link not detected on public profile within 48h."
+                    })
+            else:
+                if hours_since_post > 48:
+                    steps["pinterest_sync"] = "failed"
+                    info["errors"].append({
+                        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "step": "pinterest_sync",
+                        "message": "Pinterest sync verification timed out. Profile HTML fetch failed consistently."
+                    })
+                    
+    save_diagnostics(data)
+    
+    # 3. Write human-readable diagnostics log file
+    report = []
+    report.append("==================================================")
+    report.append(f"DIAGNOSTICS REPORT - Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    report.append("==================================================")
+    
+    if not username:
+        report.append("[NOTICE] PINTEREST_USERNAME is not set in .env. Pinterest verification is skipped.")
+        report.append("==================================================")
+        
+    report.append("[Active Pipeline Monitoring]")
+    
+    active_posts = sorted(data.items(), key=lambda x: x[1].get("posted_at", ""), reverse=True)[:10]
+    
+    for asin, info in active_posts:
+        steps = info["steps"]
+        report.append(f"- ASIN: {asin} ({info.get('product_name')})")
+        report.append(f"  * Posted At       : {info.get('posted_at')}")
+        report.append(f"  * Content Gen     : {steps.get('generation').upper()}")
+        report.append(f"  * XML Feed Update : {steps.get('xml_update').upper()}")
+        report.append(f"  * GitHub Git Push : {steps.get('git_push').upper()}")
+        report.append(f"  * GitHub Hosting  : {steps.get('github_hosting').upper()}")
+        
+        p_sync = steps.get('pinterest_sync')
+        if not username and p_sync == "pending":
+            report.append("  * Pinterest Sync  : SKIPPED (Username missing)")
+        else:
+            report.append(f"  * Pinterest Sync  : {p_sync.upper()}")
+        report.append("")
+        
+    report.append("==================================================")
+    report.append("[Recent Errors & Warnings]")
+    errors_found = False
+    for asin, info in data.items():
+        if info.get("errors"):
+            errors_found = True
+            report.append(f"- ASIN: {asin} ({info.get('product_name')})")
+            for err in info["errors"]:
+                report.append(f"  [{err['timestamp']}] Step '{err['step']}': {err['message']}")
+            report.append("")
+            
+    if not errors_found:
+        report.append("- No errors detected in the monitored pipeline.")
+        
+    report.append("==================================================")
+    
+    log_content = "\n".join(report)
+    try:
+        with open(DIAGNOSTICS_LOG, "w", encoding="utf-8") as f:
+            f.write(log_content)
+        print(f"Diagnostics log written to {DIAGNOSTICS_LOG}")
+    except Exception as e:
+        print(f"Failed to write diagnostics log: {e}")
 
 def get_posted_asins():
     """Reads the posting history to avoid duplicate posts."""
@@ -366,17 +547,29 @@ def main():
     print(f"Targeting: {product_name} (ASIN: {asin})")
     print(f"Generated Affiliate Link: {affiliate_url}")
     
+    update_diagnostics_step(asin, product_name, "generation", "pending")
+    
     # 4. Generate Content via Gemini
     print("Generating engaging review article using Gemini API...")
-    article = generator.generate_review(
-        product_name=product_name,
-        keyword=keyword,
-        affiliate_url=affiliate_url
-    )
-    
-    title = article["title"]
-    raw_html_content = article["content"]
-    plain_desc_text = clean_html_to_plain_text(raw_html_content)
+    try:
+        article = generator.generate_review(
+            product_name=product_name,
+            keyword=keyword,
+            affiliate_url=affiliate_url
+        )
+        title = article["title"]
+        raw_html_content = article["content"]
+        plain_desc_text = clean_html_to_plain_text(raw_html_content)
+        update_diagnostics_step(asin, product_name, "generation", "success")
+    except Exception as e:
+        error_msg = f"Gemini content generation failed: {e}"
+        print(error_msg)
+        update_diagnostics_step(asin, product_name, "generation", "failed", error_msg)
+        try:
+            run_diagnostics_pipeline()
+        except Exception:
+            pass
+        return
     
     # 5. Fetch and download high-resolution image locally to images/ directory
     scraped_image = fetch_amazon_image_url(asin, product_name)
@@ -412,34 +605,70 @@ def main():
     github_image_url = f"https://kitchen.saisaido.com/images/{image_filename}"
     
     # 6. Generate redirect HTML locally
-    redirect_url = generate_redirect_html(asin, affiliate_url)
+    try:
+        redirect_url = generate_redirect_html(asin, affiliate_url)
+    except Exception as e:
+        error_msg = f"Redirect HTML generation failed: {e}"
+        print(error_msg)
+        update_diagnostics_step(asin, product_name, "xml_update", "failed", error_msg)
+        try:
+            run_diagnostics_pipeline()
+        except Exception:
+            pass
+        return
     
     # 7. Update feed.xml locally
     pub_date_rfc = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
     print("Updating feed.xml...")
-    feed_updated = update_feed_xml(
-        title=title,
-        affiliate_url=redirect_url,
-        pub_date=pub_date_rfc,
-        asin=asin,
-        image_url=github_image_url,
-        description_text=plain_desc_text
-    )
+    try:
+        feed_updated = update_feed_xml(
+            title=title,
+            affiliate_url=redirect_url,
+            pub_date=pub_date_rfc,
+            asin=asin,
+            image_url=github_image_url,
+            description_text=plain_desc_text
+        )
+        if feed_updated:
+            update_diagnostics_step(asin, product_name, "xml_update", "success")
+        else:
+            raise Exception("update_feed_xml returned False")
+    except Exception as e:
+        error_msg = f"Feed XML update failed: {e}"
+        print(error_msg)
+        update_diagnostics_step(asin, product_name, "xml_update", "failed", error_msg)
+        try:
+            run_diagnostics_pipeline()
+        except Exception:
+            pass
+        return
     
     if feed_updated:
         # 8. Record to Posting History
         record_post(asin, product_name, redirect_url)
         
-        # 8. Automated Git Commit & Push to GitHub Pages
+        # 9. Automated Git Commit & Push to GitHub Pages
         print("Publishing updates to GitHub Pages...")
-        publisher = GitPublisher()
-        published = publisher.push_updates(commit_message=f"Automated post: {product_name} (ASIN: {asin})")
-        
-        if published:
-            print("=== BOT JOB COMPLETED SUCCESSFULLY ===")
-        else:
-            print("WARNING: Bot completed but failed to push updates to GitHub.")
-            print("=== BOT JOB COMPLETED WITH WARNINGS ===")
+        try:
+            publisher = GitPublisher()
+            published = publisher.push_updates(commit_message=f"Automated post: {product_name} (ASIN: {asin})")
+            if published:
+                update_diagnostics_step(asin, product_name, "git_push", "success")
+                update_diagnostics_step(asin, product_name, "github_hosting", "pending")
+                update_diagnostics_step(asin, product_name, "pinterest_sync", "pending")
+                print("=== BOT JOB COMPLETED SUCCESSFULLY ===")
+            else:
+                raise Exception("GitPublisher push_updates returned False")
+        except Exception as e:
+            error_msg = f"Git publish failed: {e}"
+            print(error_msg)
+            update_diagnostics_step(asin, product_name, "git_push", "failed", error_msg)
+            
+        # Final diagnostics run to output log
+        try:
+            run_diagnostics_pipeline()
+        except Exception as e:
+            print(f"Final diagnostics log generation failed: {e}")
     else:
         print("ERROR: Failed to update RSS feed.xml.")
         print("=== BOT JOB FAILED ===")
