@@ -202,6 +202,33 @@ def record_post(asin, product_name, affiliate_url):
     df.to_csv(HISTORY_CSV, index=False)
     print(f"Logged post history for ASIN: {asin}")
 
+def generate_redirect_html(asin, affiliate_url):
+    """Generates a static redirect HTML page for the product ASIN to bypass Pinterest domain claim limits."""
+    redirect_dir = os.path.join(BASE_DIR, "dp", asin)
+    os.makedirs(redirect_dir, exist_ok=True)
+    html_path = os.path.join(redirect_dir, "index.html")
+    
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <link rel="canonical" href="{affiliate_url}">
+    <meta http-equiv="refresh" content="0;url={affiliate_url}">
+    <script>
+        window.location.replace("{affiliate_url}");
+    </script>
+</head>
+<body>
+    <p>Redirecting to <a href="{affiliate_url}">Amazon</a>...</p>
+</body>
+</html>"""
+    
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(html_content)
+    print(f"Generated redirect HTML for ASIN {asin} at {html_path}")
+    return f"https://kitchen.saisaido.com/dp/{asin}/"
+
 def clean_html_to_plain_text(html_content):
     """Simple parser to remove HTML tags and clean up whitespace for RSS description."""
     # Replace list items and paragraph breaks with spaces
@@ -384,12 +411,15 @@ def main():
     # GitHub Pages URL structure for the image
     github_image_url = f"https://kitchen.saisaido.com/images/{image_filename}"
     
-    # 6. Update feed.xml locally
+    # 6. Generate redirect HTML locally
+    redirect_url = generate_redirect_html(asin, affiliate_url)
+    
+    # 7. Update feed.xml locally
     pub_date_rfc = datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S +0000")
     print("Updating feed.xml...")
     feed_updated = update_feed_xml(
         title=title,
-        affiliate_url=affiliate_url,
+        affiliate_url=redirect_url,
         pub_date=pub_date_rfc,
         asin=asin,
         image_url=github_image_url,
@@ -397,8 +427,8 @@ def main():
     )
     
     if feed_updated:
-        # 7. Record to Posting History
-        record_post(asin, product_name, affiliate_url)
+        # 8. Record to Posting History
+        record_post(asin, product_name, redirect_url)
         
         # 8. Automated Git Commit & Push to GitHub Pages
         print("Publishing updates to GitHub Pages...")
