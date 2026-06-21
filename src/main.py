@@ -209,6 +209,30 @@ def generate_brand_placeholder_image(product_name, output_path):
     image.save(output_path, "JPEG")
     print(f"Successfully generated custom brand placeholder image at {output_path}")
 
+def send_discord_notification(message):
+    """Sends an alert message to Discord via webhook if configured in .env."""
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
+    if not webhook_url or "your_discord_webhook" in webhook_url:
+        return
+        
+    payload = {
+        "username": "Kitchen Gadget Bot",
+        "embeds": [
+            {
+                "title": "🚨 System Alert / Error Detected",
+                "description": message,
+                "color": 15158332, # Red color
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
+        ]
+    }
+    try:
+        r = requests.post(webhook_url, json=payload, timeout=10)
+        if r.status_code not in [200, 204]:
+            print(f"Failed to send Discord notification: HTTP {r.status_code}")
+    except Exception as e:
+        print(f"Error sending Discord notification: {e}")
+
 DIAGNOSTICS_JSON = os.path.join(BASE_DIR, "data", "diagnostics.json")
 DIAGNOSTICS_LOG = os.path.join(BASE_DIR, "data", "diagnostics.log")
 
@@ -295,19 +319,23 @@ def run_diagnostics_pipeline():
                     steps["github_hosting"] = "success"
                 elif hours_since_post > 24:
                     steps["github_hosting"] = "failed"
+                    msg = f"GitHub hosting verification timed out after 24h (HTTP {r.status_code})"
                     info["errors"].append({
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "step": "github_hosting",
-                        "message": f"GitHub hosting verification timed out after 24h (HTTP {r.status_code})"
+                        "message": msg
                     })
+                    send_discord_notification(f"**ASIN**: {asin}\n**Product**: {info.get('product_name')}\n**Step**: GitHub Hosting\n**Error**: {msg}")
             except Exception as e:
                 if hours_since_post > 24:
                     steps["github_hosting"] = "failed"
+                    msg = f"GitHub hosting verification error: {e}"
                     info["errors"].append({
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "step": "github_hosting",
-                        "message": f"GitHub hosting verification error: {e}"
+                        "message": msg
                     })
+                    send_discord_notification(f"**ASIN**: {asin}\n**Product**: {info.get('product_name')}\n**Step**: GitHub Hosting\n**Error**: {msg}")
                     
         # Check Pinterest Sync
         if steps.get("pinterest_sync") == "pending":
@@ -319,19 +347,23 @@ def run_diagnostics_pipeline():
                     steps["pinterest_sync"] = "success"
                 elif hours_since_post > 48:
                     steps["pinterest_sync"] = "failed"
+                    msg = "Pinterest sync timed out. Link not detected on public profile within 48h."
                     info["errors"].append({
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "step": "pinterest_sync",
-                        "message": "Pinterest sync timed out. Link not detected on public profile within 48h."
+                        "message": msg
                     })
+                    send_discord_notification(f"**ASIN**: {asin}\n**Product**: {info.get('product_name')}\n**Step**: Pinterest Sync\n**Error**: {msg}")
             else:
                 if hours_since_post > 48:
                     steps["pinterest_sync"] = "failed"
+                    msg = "Pinterest sync verification timed out. Profile HTML fetch failed consistently."
                     info["errors"].append({
                         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "step": "pinterest_sync",
-                        "message": "Pinterest sync verification timed out. Profile HTML fetch failed consistently."
+                        "message": msg
                     })
+                    send_discord_notification(f"**ASIN**: {asin}\n**Product**: {info.get('product_name')}\n**Step**: Pinterest Sync\n**Error**: {msg}")
                     
     save_diagnostics(data)
     
@@ -600,6 +632,7 @@ def main():
         error_msg = f"Gemini content generation failed: {e}"
         print(error_msg)
         update_diagnostics_step(asin, product_name, "generation", "failed", error_msg)
+        send_discord_notification(f"**ASIN**: {asin}\n**Product**: {product_name}\n**Step**: Content Generation\n**Error**: {error_msg}")
         try:
             run_diagnostics_pipeline()
         except Exception:
@@ -656,6 +689,7 @@ def main():
         error_msg = f"Redirect HTML generation failed: {e}"
         print(error_msg)
         update_diagnostics_step(asin, product_name, "xml_update", "failed", error_msg)
+        send_discord_notification(f"**ASIN**: {asin}\n**Product**: {product_name}\n**Step**: Redirect HTML Gen\n**Error**: {error_msg}")
         try:
             run_diagnostics_pipeline()
         except Exception:
@@ -682,6 +716,7 @@ def main():
         error_msg = f"Feed XML update failed: {e}"
         print(error_msg)
         update_diagnostics_step(asin, product_name, "xml_update", "failed", error_msg)
+        send_discord_notification(f"**ASIN**: {asin}\n**Product**: {product_name}\n**Step**: Feed XML Update\n**Error**: {error_msg}")
         try:
             run_diagnostics_pipeline()
         except Exception:
@@ -708,6 +743,7 @@ def main():
             error_msg = f"Git publish failed: {e}"
             print(error_msg)
             update_diagnostics_step(asin, product_name, "git_push", "failed", error_msg)
+            send_discord_notification(f"**ASIN**: {asin}\n**Product**: {product_name}\n**Step**: GitHub Git Push\n**Error**: {error_msg}")
             
         # Final diagnostics run to output log
         try:
