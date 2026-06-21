@@ -31,7 +31,7 @@ from content_generator import ContentGenerator
 def search_image_url_via_gemini(product_name, asin):
     """
     Uses Gemini 3.5 Flash with Google Search grounding to find the active
-    high-quality product image URL from Amazon CDN.
+    high-quality product image URL from Amazon CDN or external reputable sites.
     """
     from google import genai
     from google.genai import types
@@ -42,14 +42,14 @@ def search_image_url_via_gemini(product_name, asin):
         
     client = genai.Client(api_key=api_key)
     prompt = f"""
-Search the live web using Google Search to find the direct product listing image URL hosted on Amazon's CDN for:
+Search the live web using Google Search to find a direct, high-quality product image URL for the following product:
 Product Name: '{product_name}' (Amazon US ASIN: {asin}).
 
-Look for high-quality product images hosted on Amazon's image servers. 
-The URL must be a direct link (starting with https and end in .jpg, .jpeg, or .png).
-Look for CDN URLs containing '/images/I/' (e.g. 'https://m.media-amazon.com/images/I/71xyz.jpg' or similar).
-Do NOT return the deprecated format containing '/images/P/' (such as 'images-na.ssl-images-amazon.com/images/P/...').
+You must search and return a direct URL to an image showing the ACTUAL product.
+Priority 1: A direct image URL hosted on Amazon's CDN containing '/images/I/' (e.g., 'https://m.media-amazon.com/images/I/71xyz.jpg').
+Priority 2: If no Amazon CDN URL is found, look for a direct image URL of this EXACT product from other online shopping stores, manufacturer websites, or reputable review sites (ending in .jpg, .jpeg, or .png).
 
+The image must be the actual product itself, not a logo, generic template, or unrelated scenery.
 Return ONLY the raw URL string. No markdown formatting (no ```), no HTML, no explanation, no text wrapper. Just the URL.
 If you cannot find any matching URL on the live web, reply exactly with: None
 """
@@ -64,22 +64,21 @@ If you cannot find any matching URL on the live web, reply exactly with: None
         )
         if response.text:
             text = response.text.strip()
-            # Flexibly extract CDN URLs containing product image identifier (/images/I/)
-            match = re.search(r'(https://[^\s\'"]+images[^\s\'"]+/images/I/[^\s\'"]+\.(?:jpg|jpeg|png))', text)
-            if match:
-                url = match.group(1)
+            # 1. First priority: Try to extract any Amazon CDN image URL
+            match_amazon = re.search(r'(https://[^\s\'"]*(?:media-amazon\.com|images-amazon\.com)[^\s\'"]+/images/I/[^\s\'"]+\.(?:jpg|jpeg|png))', text)
+            if match_amazon:
+                url = match_amazon.group(1)
                 url = url.replace('`', '').replace('"', '').replace("'", "")
-                print(f"Successfully discovered image URL via Gemini Web Search: {url}")
+                print(f"Successfully discovered Amazon CDN image URL via Gemini: {url}")
                 return url
-            else:
-                # Broader fallback search for any amazon image CDN if /images/I/ is missing but still valid
-                match_broad = re.search(r'(https://[^\s\'"]*(?:media-amazon\.com|images-amazon\.com)[^\s\'"]+\.(?:jpg|jpeg|png))', text)
-                if match_broad:
-                    url = match_broad.group(1)
-                    url = url.replace('`', '').replace('"', '').replace("'", "")
-                    if "/images/P/" not in url:
-                        print(f"Successfully discovered image URL via Gemini Web Search (broad): {url}")
-                        return url
+            
+            # 2. Second priority: If not Amazon CDN, extract any valid direct image URL
+            match_any = re.search(r'(https://[^\s\'"]+\.(?:jpg|jpeg|png)(?:\?[^\s\'"]*)?)', text)
+            if match_any:
+                url = match_any.group(1)
+                url = url.replace('`', '').replace('"', '').replace("'", "")
+                print(f"Successfully discovered external product image URL via Gemini: {url}")
+                return url
     except Exception as e:
         print(f"Gemini image search failed: {e}")
     return None
