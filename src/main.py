@@ -145,34 +145,70 @@ def fetch_amazon_image_url(asin, product_name):
     if gemini_scraped:
         return gemini_scraped
         
-    # Ultimate fallback: generate high-quality Flickr image URL based on product keywords
-    clean_name = product_name.lower()
+    # Ultimate fallback: Return None to trigger automated Pillow text-based fallback image generation
+    print(f"WARNING: Amazon image retrieval failed for ASIN {asin}. Will generate a high-quality brand placeholder image.")
+    return None
+
+def generate_brand_placeholder_image(product_name, output_path):
+    """Generates a premium brand image featuring the product name dynamically when Amazon images fail."""
+    from PIL import Image, ImageDraw, ImageFont
     
-    # Split by with/for to cut off accessory/purpose phrases
-    split_pattern = r'\b(with|for)\b'
-    parts = re.split(split_pattern, clean_name, maxsplit=1)
-    core_name = parts[0].strip()
+    width, height = 600, 400
+    # Create background with a smooth gradient effect
+    image = Image.new("RGB", (width, height), "#ffffff")
+    draw = ImageDraw.Draw(image)
     
-    # Remove special characters, numbers and extra spaces
-    core_name = re.sub(r'[^a-zA-Z\s]', ' ', core_name)
+    # Draw soft brand-styled gradient / background details
+    for y in range(height):
+        r = int(255 - (y / height) * 15)
+        g = int(255 - (y / height) * 10)
+        b = int(255 - (y / height) * 5)
+        color = f"#{r:02x}{g:02x}{b:02x}"
+        draw.line([(0, y), (width, y)], fill=color)
+        
+    # Draw premium orange border (Amazon-inspired accent)
+    draw.rectangle([20, 20, width-20, height-20], outline="#e47911", width=4)
     
-    # Filter out stopwords and generic terms
-    stopwords = {
-        "mini", "handheld", "electric", "portable", "gadget", "tool", 
-        "kitchen", "best", "new", "top", "the", "a", "an", "of", "in", 
-        "on", "at", "by", "to", "and", "or", "cover", "holder", "pack",
-        "set", "pcs", "piece"
-    }
-    words = [w for w in core_name.split() if w not in stopwords]
+    # Draw brand logo
+    try:
+        font_brand = ImageFont.truetype("arial.ttf", 16)
+        font_title = ImageFont.truetype("arial.ttf", 26)
+        font_footer = ImageFont.truetype("arial.ttf", 14)
+    except IOError:
+        font_brand = ImageFont.load_default()
+        font_title = ImageFont.load_default()
+        font_footer = ImageFont.load_default()
+        
+    # Brand title at the top
+    draw.text((45, 45), "SMART KITCHEN FINDS", fill="#e47911", font=font_brand)
     
-    # Extract up to 2 keywords from the end of the filtered word list
-    keywords = words[-2:] if len(words) >= 2 else (words if words else ["gadget"])
-    keyword_str = ",".join(keywords)
+    # Draw thin horizontal divider line
+    draw.line([(45, 75), (width - 45, 75)], fill="#dddddd", width=1)
     
-    fallback_url = f"https://loremflickr.com/600/400/kitchen,{keyword_str}/all"
+    # Wrap product name text to fit beautifully
+    words = product_name.split()
+    lines = []
+    current_line = []
+    for word in words:
+        current_line.append(word)
+        if len(" ".join(current_line)) > 28:
+            current_line.pop()
+            lines.append(" ".join(current_line))
+            current_line = [word]
+    if current_line:
+        lines.append(" ".join(current_line))
+        
+    # Draw the text lines centered vertically
+    y_start = 120
+    for line in lines[:4]: # Limit to 4 lines
+        draw.text((45, y_start), line, fill="#222222", font=font_title)
+        y_start += 42
+        
+    # Footer call to action
+    draw.text((45, 335), "Featured Smart Gadget - Click to View Details on Amazon", fill="#555555", font=font_footer)
     
-    print(f"WARNING: Amazon image retrieval failed. Using premium Flickr fallback image for queries '{keyword_str}': {fallback_url}")
-    return fallback_url
+    image.save(output_path, "JPEG")
+    print(f"Successfully generated custom brand placeholder image at {output_path}")
 
 DIAGNOSTICS_JSON = os.path.join(BASE_DIR, "data", "diagnostics.json")
 DIAGNOSTICS_LOG = os.path.join(BASE_DIR, "data", "diagnostics.log")
@@ -570,36 +606,46 @@ def main():
         except Exception:
             pass
         return
-    
     # 5. Fetch and download high-resolution image locally to images/ directory
     scraped_image = fetch_amazon_image_url(asin, product_name)
-    if not scraped_image:
-        scraped_image = "https://placehold.co/600x400/fafafa/e47911?text=Smart+Kitchen+Finds"
-        
     image_filename = f"temp_{asin}.jpg"
     local_image_path = os.path.join(IMAGE_DIR, image_filename)
     
-    print(f"Downloading image from {scraped_image} to host on GitHub Pages...")
-    try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        img_resp = requests.get(scraped_image, headers=headers, timeout=20)
-        img_resp.raise_for_status()
-        os.makedirs(os.path.dirname(local_image_path), exist_ok=True)
-        with open(local_image_path, "wb") as f:
-            f.write(img_resp.content)
-        print(f"Successfully saved image locally: {local_image_path}")
-    except Exception as e:
-        print(f"Failed to download image: {e}. Reverting to standard placeholder.")
-        # Re-save a fallback image just in case
-        fallback_url = "https://placehold.co/600x400/fafafa/e47911?text=Smart+Kitchen+Finds"
+    # 5.1 Download image locally or generate fallback placeholder
+    image_downloaded = False
+    
+    if scraped_image:
+        print(f"Downloading image from {scraped_image} via curl to host on GitHub Pages...")
         try:
-            img_resp = requests.get(fallback_url, timeout=15)
-            with open(local_image_path, "wb") as f:
-                f.write(img_resp.content)
-        except Exception:
-            pass
+            import subprocess
+            os.makedirs(os.path.dirname(local_image_path), exist_ok=True)
+            user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            result = subprocess.run(
+                ["curl", "-s", "-L", "-H", f"User-Agent: {user_agent}", "-o", local_image_path, scraped_image],
+                timeout=25,
+                capture_output=True
+            )
+            if result.returncode == 0 and os.path.exists(local_image_path) and os.path.getsize(local_image_path) > 0:
+                print(f"Successfully saved image locally via curl: {local_image_path}")
+                image_downloaded = True
+            else:
+                print(f"curl download failed with return code {result.returncode}")
+        except Exception as e:
+            print(f"Failed to download image via curl: {e}")
+            
+    if not image_downloaded:
+        print(f"Amazon image download unavailable. Generating dynamic brand placeholder image for '{product_name}'...")
+        try:
+            generate_brand_placeholder_image(product_name, local_image_path)
+            image_downloaded = True
+        except Exception as e:
+            print(f"Failed to generate dynamic brand placeholder: {e}")
+            try:
+                from PIL import Image
+                img = Image.new("RGB", (600, 400), color="#fafafa")
+                img.save(local_image_path)
+            except Exception:
+                pass
             
     # GitHub Pages URL structure for the image
     github_image_url = f"https://kitchen.saisaido.com/images/{image_filename}"
